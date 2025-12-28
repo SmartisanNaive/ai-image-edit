@@ -1,0 +1,8 @@
+name: nano-banana-app
+
+services:
+  web:
+    build: .
+    ports:
+      - "8890:80"
+    restart: unless-stopped
