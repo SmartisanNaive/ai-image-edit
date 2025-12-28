@@ -69,7 +69,8 @@ docker-compose down
 npm run dev
 
 # 本地docker访问方式地址(服务器上需要自行修改nginx配置)
-http://localhost:8890 
+http://localhost:8890
+
 ```
 
 
