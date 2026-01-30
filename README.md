@@ -233,4 +233,13 @@ A: 图片元素如果比较多比较复杂，可能会导致不稳定，影响�
 
 ## 🌟 Star History
 如果这个项目对你有帮助，请给一个 ⭐ Star 支持一下！
+
+## ☕ 支持项目
+- <img width="250" height="342" alt="image" src="https://github.com/user-attachments/assets/e1d9ca3a-17b8-450f-968a-a0866cb1b85c" /> <img width="271" height="386" alt="image" src="https://github.com/user-attachments/assets/efbf9b31-80b5-49b8-b905-6a59c6e5ce16" />
+
+
+
+
+
+如果这个项目对你有帮助，欢迎赞助支持~
 ---
