@@ -9,7 +9,11 @@ import {
     ChevronUp,
     ChevronDown,
     Scissors,
-    Download
+    Download,
+    Copy,
+    Layers,
+    Check,
+    X
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -31,10 +35,18 @@ export function LayerPanel({
     onToggleLock,
     onMoveLayerUp,
     onMoveLayerDown,
+    onDuplicateLayer,
     onRemoveBackground,
     onDownloadLayer,
     isRemoving = false,
     removalProgress = null,
+    maskExtractionMode = false,
+    setMaskExtractionMode,
+    mainLayerForMask,
+    setMainLayerForMask,
+    maskLayerForExtraction,
+    setMaskLayerForExtraction,
+    onMaskExtraction,
 }) {
     const [editingId, setEditingId] = useState(null);
     const [editingName, setEditingName] = useState('');
@@ -67,6 +79,14 @@ export function LayerPanel({
         return '处理中...';
     };
 
+    // 获取按钮样式的辅助函数
+    const getButtonStyle = (isSelected, isMainLayer, isMaskLayer) => {
+        if (isSelected || isMainLayer || isMaskLayer) {
+            return "hover:bg-white/20 text-white";
+        }
+        return "hover:bg-black/[0.06] dark:hover:bg-white/[0.08] text-gray-600 dark:text-gray-400";
+    };
+
     return (
         <div className="flex flex-col h-full">
             {/* Header - macOS sidebar header style */}
@@ -76,10 +96,92 @@ export function LayerPanel({
                                -webkit-font-smoothing-antialiased">
                     图层
                 </h3>
-                <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400">
-                    {layers.length} 个
-                </span>
+                <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400">
+                        {layers.length} 个
+                    </span>
+                    <button
+                        className={cn(
+                            "w-7 h-7 rounded-[5px] flex items-center justify-center",
+                            "transition-all duration-200 ease-out",
+                            "active:scale-[0.92]",
+                            maskExtractionMode
+                                ? "bg-blue-500 text-white shadow-sm"
+                                : "hover:bg-black/[0.06] dark:hover:bg-white/[0.08] text-gray-600 dark:text-gray-400"
+                        )}
+                        onClick={() => {
+                            setMaskExtractionMode?.(!maskExtractionMode);
+                            if (maskExtractionMode) {
+                                setMainLayerForMask?.(null);
+                                setMaskLayerForExtraction?.(null);
+                            }
+                        }}
+                        title={maskExtractionMode ? "退出遮罩抠图模式" : "遮罩抠图模式"}
+                    >
+                        <Layers size={14} strokeWidth={1.5} />
+                    </button>
+                </div>
             </div>
+
+            {/* Mask Extraction Mode Panel */}
+            {maskExtractionMode && (
+                <div className="px-4 py-3 bg-purple-50/80 dark:bg-purple-900/20
+                                border-b border-purple-100/50 dark:border-purple-800/30">
+                    <div className="text-[11px] font-medium text-purple-700 dark:text-purple-300 mb-2">
+                        遮罩抠图模式
+                    </div>
+                    <div className="space-y-2 text-[11px]">
+                        <div className="flex items-center justify-between">
+                            <span className="text-gray-600 dark:text-gray-400">主图层:</span>
+                            <span className={cn(
+                                "font-medium",
+                                mainLayerForMask ? "text-purple-700 dark:text-purple-300" : "text-gray-400"
+                            )}>
+                                {mainLayerForMask ? layers.find(l => l.id === mainLayerForMask)?.name : "未选择"}
+                            </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                            <span className="text-gray-600 dark:text-gray-400">遮罩图层:</span>
+                            <span className={cn(
+                                "font-medium",
+                                maskLayerForExtraction ? "text-purple-700 dark:text-purple-300" : "text-gray-400"
+                            )}>
+                                {maskLayerForExtraction ? layers.find(l => l.id === maskLayerForExtraction)?.name : "未选择"}
+                            </span>
+                        </div>
+                    </div>
+                    <div className="flex gap-2 mt-3">
+                        <button
+                            className={cn(
+                                "flex-1 px-3 py-1.5 rounded-[5px] text-[11px] font-medium",
+                                "transition-all duration-200 ease-out active:scale-[0.96]",
+                                mainLayerForMask && maskLayerForExtraction
+                                    ? "bg-purple-500 text-white hover:bg-purple-600"
+                                    : "bg-gray-200 dark:bg-gray-700 text-gray-400 cursor-not-allowed"
+                            )}
+                            onClick={onMaskExtraction}
+                            disabled={!mainLayerForMask || !maskLayerForExtraction}
+                        >
+                            <Check size={12} className="inline mr-1" />
+                            执行抠图
+                        </button>
+                        <button
+                            className="px-3 py-1.5 rounded-[5px] text-[11px] font-medium
+                                     bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300
+                                     hover:bg-gray-300 dark:hover:bg-gray-600
+                                     transition-all duration-200 ease-out active:scale-[0.96]"
+                            onClick={() => {
+                                setMaskExtractionMode?.(false);
+                                setMainLayerForMask?.(null);
+                                setMaskLayerForExtraction?.(null);
+                            }}
+                        >
+                            <X size={12} className="inline mr-1" />
+                            取消
+                        </button>
+                    </div>
+                </div>
+            )}
 
             {/* Progress Indicator - macOS style with blue accent */}
             {isRemoving && removalProgress && (
@@ -109,19 +211,47 @@ export function LayerPanel({
                     </div>
                 ) : (
                     <div className="space-y-1">
-                        {layers.map((layer, index) => (
+                        {layers.map((layer, index) => {
+                            const isMainLayer = maskExtractionMode && mainLayerForMask === layer.id;
+                            const isMaskLayer = maskExtractionMode && maskLayerForExtraction === layer.id;
+                            const isSelected = !maskExtractionMode && selectedLayerId === layer.id;
+
+                            return (
                             <div
                                 key={layer.id}
                                 className={cn(
                                     'group relative rounded-[6px] transition-all duration-200 ease-out cursor-pointer',
                                     /* Selection state - Blue bubble style with proper padding */
-                                    selectedLayerId === layer.id
-                                        ? 'bg-blue-500 shadow-[0_0_0_0.5px_rgba(59,130,246,0.5)]'
-                                        : 'bg-transparent hover:bg-black/[0.03] dark:hover:bg-white/[0.05]',
+                                    isSelected && 'bg-blue-500 shadow-[0_0_0_0.5px_rgba(59,130,246,0.5)]',
+                                    /* Mask extraction mode states */
+                                    isMainLayer && 'bg-purple-500 shadow-[0_0_0_0.5px_rgba(168,85,247,0.5)]',
+                                    isMaskLayer && 'bg-green-500 shadow-[0_0_0_0.5px_rgba(34,197,94,0.5)]',
+                                    /* Default states */
+                                    !isSelected && !isMainLayer && !isMaskLayer && 'bg-transparent hover:bg-black/[0.03] dark:hover:bg-white/[0.05]',
                                     /* Zebra striping for better readability */
-                                    index % 2 === 1 && selectedLayerId !== layer.id && 'bg-black/[0.015] dark:bg-white/[0.02]'
+                                    index % 2 === 1 && !isSelected && !isMainLayer && !isMaskLayer && 'bg-black/[0.015] dark:bg-white/[0.02]'
                                 )}
-                                onClick={() => onSelectLayer?.(layer.id)}
+                                onClick={() => {
+                                    if (maskExtractionMode) {
+                                        // 遮罩抠图模式：第一次点击选择主图层，第二次点击选择遮罩图层
+                                        if (!mainLayerForMask) {
+                                            setMainLayerForMask?.(layer.id);
+                                        } else if (mainLayerForMask === layer.id) {
+                                            // 取消选择主图层
+                                            setMainLayerForMask?.(null);
+                                        } else if (!maskLayerForExtraction) {
+                                            setMaskLayerForExtraction?.(layer.id);
+                                        } else if (maskLayerForExtraction === layer.id) {
+                                            // 取消选择遮罩图层
+                                            setMaskLayerForExtraction?.(null);
+                                        } else {
+                                            // 如果两个都已选择，点击其他图层则替换遮罩图层
+                                            setMaskLayerForExtraction?.(layer.id);
+                                        }
+                                    } else {
+                                        onSelectLayer?.(layer.id);
+                                    }
+                                }}
                             >
                                 {/* Layer Content */}
                                 <div className="flex items-center gap-2 p-2">
@@ -162,26 +292,42 @@ export function LayerPanel({
                                                 onClick={(e) => e.stopPropagation()}
                                             />
                                         ) : (
-                                            <div
-                                                className={cn(
-                                                    "text-[13px] font-medium truncate -webkit-font-smoothing-antialiased",
-                                                    selectedLayerId === layer.id
-                                                        ? "text-white"
-                                                        : "text-gray-900 dark:text-gray-100"
-                                                )}
-                                                onDoubleClick={(e) => {
-                                                    e.stopPropagation();
-                                                    handleStartEdit(layer);
-                                                }}
-                                            >
-                                                {layer.name}
+                                            <div>
+                                                <div className="flex items-center gap-1">
+                                                    <div
+                                                        className={cn(
+                                                            "text-[13px] font-medium truncate -webkit-font-smoothing-antialiased",
+                                                            isSelected && "text-white",
+                                                            isMainLayer && "text-white",
+                                                            isMaskLayer && "text-white",
+                                                            !isSelected && !isMainLayer && !isMaskLayer && "text-gray-900 dark:text-gray-100"
+                                                        )}
+                                                        onDoubleClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleStartEdit(layer);
+                                                        }}
+                                                    >
+                                                        {layer.name}
+                                                    </div>
+                                                    {isMainLayer && (
+                                                        <span className="px-1.5 py-0.5 text-[9px] font-semibold bg-white/20 text-white rounded">
+                                                            主图层
+                                                        </span>
+                                                    )}
+                                                    {isMaskLayer && (
+                                                        <span className="px-1.5 py-0.5 text-[9px] font-semibold bg-white/20 text-white rounded">
+                                                            遮罩
+                                                        </span>
+                                                    )}
+                                                </div>
                                             </div>
                                         )}
                                         <div className={cn(
                                             "text-[11px] font-medium",
-                                            selectedLayerId === layer.id
-                                                ? "text-blue-100"
-                                                : "text-gray-500 dark:text-gray-400"
+                                            isSelected && "text-blue-100",
+                                            isMainLayer && "text-purple-100",
+                                            isMaskLayer && "text-green-100",
+                                            !isSelected && !isMainLayer && !isMaskLayer && "text-gray-500 dark:text-gray-400"
                                         )}>
                                             {layer.width} × {layer.height}
                                         </div>
@@ -196,9 +342,7 @@ export function LayerPanel({
                                             "w-7 h-7 rounded-[5px] flex items-center justify-center",
                                             "transition-all duration-200 ease-out",
                                             "active:scale-[0.92]",
-                                            selectedLayerId === layer.id
-                                                ? "hover:bg-white/20 text-white"
-                                                : "hover:bg-black/[0.06] dark:hover:bg-white/[0.08] text-gray-600 dark:text-gray-400"
+                                            getButtonStyle(isSelected, isMainLayer, isMaskLayer)
                                         )}
                                         onClick={(e) => {
                                             e.stopPropagation();
@@ -215,9 +359,7 @@ export function LayerPanel({
                                             "w-7 h-7 rounded-[5px] flex items-center justify-center",
                                             "transition-all duration-200 ease-out",
                                             "active:scale-[0.92]",
-                                            selectedLayerId === layer.id
-                                                ? "hover:bg-white/20 text-white"
-                                                : "hover:bg-black/[0.06] dark:hover:bg-white/[0.08] text-gray-600 dark:text-gray-400"
+                                            getButtonStyle(isSelected, isMainLayer, isMaskLayer)
                                         )}
                                         onClick={(e) => {
                                             e.stopPropagation();
@@ -235,9 +377,7 @@ export function LayerPanel({
                                             "transition-all duration-200 ease-out",
                                             "active:scale-[0.92]",
                                             index === 0 && "opacity-30 cursor-not-allowed",
-                                            selectedLayerId === layer.id
-                                                ? "hover:bg-white/20 text-white"
-                                                : "hover:bg-black/[0.06] dark:hover:bg-white/[0.08] text-gray-600 dark:text-gray-400"
+                                            getButtonStyle(isSelected, isMainLayer, isMaskLayer)
                                         )}
                                         onClick={(e) => {
                                             e.stopPropagation();
@@ -256,9 +396,7 @@ export function LayerPanel({
                                             "transition-all duration-200 ease-out",
                                             "active:scale-[0.92]",
                                             index === layers.length - 1 && "opacity-30 cursor-not-allowed",
-                                            selectedLayerId === layer.id
-                                                ? "hover:bg-white/20 text-white"
-                                                : "hover:bg-black/[0.06] dark:hover:bg-white/[0.08] text-gray-600 dark:text-gray-400"
+                                            getButtonStyle(isSelected, isMainLayer, isMaskLayer)
                                         )}
                                         onClick={(e) => {
                                             e.stopPropagation();
@@ -270,9 +408,26 @@ export function LayerPanel({
                                         <ChevronDown size={14} strokeWidth={1.5} />
                                     </button>
 
+                                    {/* Duplicate Layer */}
+                                    <button
+                                        className={cn(
+                                            "w-7 h-7 rounded-[5px] flex items-center justify-center",
+                                            "transition-all duration-200 ease-out",
+                                            "active:scale-[0.92]",
+                                            getButtonStyle(isSelected, isMainLayer, isMaskLayer)
+                                        )}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            onDuplicateLayer?.(layer.id);
+                                        }}
+                                        title="复制图层"
+                                    >
+                                        <Copy size={14} strokeWidth={1.5} />
+                                    </button>
+
                                     <div className={cn(
                                         "w-[1px] h-4 mx-1",
-                                        selectedLayerId === layer.id
+                                        (isSelected || isMainLayer || isMaskLayer)
                                             ? "bg-white/30"
                                             : "bg-black/[0.08] dark:bg-white/[0.12]"
                                     )} />
@@ -284,9 +439,7 @@ export function LayerPanel({
                                             "transition-all duration-200 ease-out",
                                             "active:scale-[0.92]",
                                             isRemoving && "opacity-30 cursor-not-allowed",
-                                            selectedLayerId === layer.id
-                                                ? "hover:bg-white/20 text-white"
-                                                : "hover:bg-black/[0.06] dark:hover:bg-white/[0.08] text-gray-600 dark:text-gray-400"
+                                            getButtonStyle(isSelected, isMainLayer, isMaskLayer)
                                         )}
                                         onClick={(e) => {
                                             e.stopPropagation();
@@ -304,9 +457,7 @@ export function LayerPanel({
                                             "w-7 h-7 rounded-[5px] flex items-center justify-center",
                                             "transition-all duration-200 ease-out",
                                             "active:scale-[0.92]",
-                                            selectedLayerId === layer.id
-                                                ? "hover:bg-white/20 text-white"
-                                                : "hover:bg-black/[0.06] dark:hover:bg-white/[0.08] text-gray-600 dark:text-gray-400"
+                                            getButtonStyle(isSelected, isMainLayer, isMaskLayer)
                                         )}
                                         onClick={(e) => {
                                             e.stopPropagation();
@@ -323,7 +474,7 @@ export function LayerPanel({
                                             "w-7 h-7 rounded-[5px] flex items-center justify-center",
                                             "transition-all duration-200 ease-out",
                                             "active:scale-[0.92]",
-                                            selectedLayerId === layer.id
+                                            (isSelected || isMainLayer || isMaskLayer)
                                                 ? "hover:bg-red-500/30 text-red-200"
                                                 : "hover:bg-red-50 dark:hover:bg-red-900/30 text-red-600 dark:text-red-400"
                                         )}
@@ -339,7 +490,8 @@ export function LayerPanel({
                                     </button>
                                 </div>
                             </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 )}
             </div>

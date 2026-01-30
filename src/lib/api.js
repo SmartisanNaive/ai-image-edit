@@ -438,7 +438,76 @@ export async function generateImageViaChatCompletions({ prompt, apiKey, baseUrl,
     }
 }
 
-export async function editImageViaChatCompletions({ imageDataUrl, maskDataUrl, prompt, apiKey, baseUrl, model }) {
+/**
+ * Edit image using Gemini Native API format
+ */
+async function editImageViaGeminiNative({ imageDataUrl, maskDataUrl, prompt, apiKey, baseUrl, model }) {
+    const url = `${baseUrl || API_CONFIG.baseUrl}/v1beta/models/${model}:generateContent`;
+
+    // 解析图片数据
+    const imageParsed = parseDataUrl(imageDataUrl);
+    if (!imageParsed) throw new Error('无效的图片数据');
+
+    // 构建 parts 数组
+    const parts = [{ text: prompt }];
+
+    // 添加原图
+    parts.push({
+        inlineData: {
+            mimeType: imageParsed.mimeType,
+            data: imageParsed.base64
+        }
+    });
+
+    // 如果有遮罩，添加遮罩图
+    if (maskDataUrl) {
+        const maskParsed = parseDataUrl(maskDataUrl);
+        if (maskParsed) {
+            parts.push({
+                inlineData: {
+                    mimeType: maskParsed.mimeType,
+                    data: maskParsed.base64
+                }
+            });
+        }
+    }
+
+    const response = await fetchWithTimeout(url, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey || API_CONFIG.apiKey}`
+        },
+        body: JSON.stringify({
+            contents: [{
+                role: "user",
+                parts: parts
+            }],
+            generationConfig: {
+                responseModalities: ["image"]
+            }
+        })
+    });
+
+    if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error?.message || '编辑失败');
+    }
+
+    const data = await response.json();
+    const extracted = extractBase64ImageFromGeminiNative(data);
+    if (!extracted) throw new Error('编辑失败：未从响应中解析到图片数据');
+
+    return extracted; // { mimeType, base64 }
+}
+
+export async function editImageViaChatCompletions({ imageDataUrl, maskDataUrl, prompt, apiKey, baseUrl, model, useGeminiNative = false }) {
+    // 如果使用 Gemini 原生格式，调用专门的函数
+    if (useGeminiNative) {
+        return editImageViaGeminiNative({ imageDataUrl, maskDataUrl, prompt, apiKey, baseUrl, model });
+    }
+
+    // 否则使用 OpenAI 格式
     const url = `${baseUrl || API_CONFIG.baseUrl}/v1/chat/completions`;
 
     // 根据是否有遮罩，构建不同的指令和内容

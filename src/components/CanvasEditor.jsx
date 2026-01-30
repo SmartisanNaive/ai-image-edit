@@ -204,14 +204,20 @@ export function CanvasEditor({
 
         // 获取选中图层的原始尺寸用于归一化计算
         const selectedLayer = layers.find(l => l.id === selectedLayerId);
-        const imgWidth = selectedLayer?.width || 1000;
-        const imgHeight = selectedLayer?.height || 1000;
+        if (!selectedLayer) {
+            // 没有选中图层，清空区域
+            onRegionsChange?.([]);
+            return;
+        }
+
+        const imgWidth = selectedLayer.width || 1000;
+        const imgHeight = selectedLayer.height || 1000;
 
         // 获取选中图层的 Fabric 对象，用于计算相对坐标
         const layerObj = fabricCanvas.getObjects().find(obj => obj.layerId === selectedLayerId);
         if (!layerObj) {
-            console.warn('未找到选中的图层对象');
-            onRegionsChange?.([]);
+            // 图层对象还未创建完成（例如刚复制的图层），暂时不处理
+            // 不报错，等待下次同步
             return;
         }
 

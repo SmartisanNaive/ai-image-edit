@@ -13,12 +13,19 @@ import {
   uploadFile,
 } from './lib/api';
 import { removeImageBackground } from './lib/backgroundRemoval';
+import { extractByMask } from './lib/maskExtraction';
 
 function App() {
   // 图层管理
   const [layers, setLayers] = useState([]);
   const [selectedLayerId, setSelectedLayerId] = useState(null);
   const nextLayerIdRef = useRef(1);
+
+  // 使用 ref 保存最新的 selectedLayerId，避免闭包问题
+  const selectedLayerIdRef = useRef(selectedLayerId);
+  React.useEffect(() => {
+    selectedLayerIdRef.current = selectedLayerId;
+  }, [selectedLayerId]);
 
   const [prompt, setPrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
@@ -40,12 +47,17 @@ function App() {
   const [isRemoving, setIsRemoving] = useState(false);
   const [removalProgress, setRemovalProgress] = useState(null);
 
+  // 遮罩抠图相关
+  const [maskExtractionMode, setMaskExtractionMode] = useState(false);
+  const [mainLayerForMask, setMainLayerForMask] = useState(null);
+  const [maskLayerForExtraction, setMaskLayerForExtraction] = useState(null);
+
   const canvasRef = useRef(null);
   const [regions, setRegions] = useState([]);
   const [regionInstructions, setRegionInstructions] = useState({});
 
   // 添加新图层
-  const addLayer = async (layerData) => {
+  const addLayer = React.useCallback(async (layerData) => {
     // Parse base64 from data URL if needed
     const mime = String(layerData.url).split(';')[0].split(':')[1] || 'image/png';
     const base64 = String(layerData.url).split(',')[1];
@@ -65,22 +77,22 @@ function App() {
       mimeType: mime,
       width: img.width,
       height: img.height,
-      x: layers.length * 20,
-      y: layers.length * 20,
+      x: 0,
+      y: 0,
       ...layerData,
     };
     setLayers(prev => [...prev, newLayer]);
     setSelectedLayerId(newLayer.id);
     return newLayer;
-  };
+  }, []);
 
   // 删除图层
-  const deleteLayer = (layerId) => {
+  const deleteLayer = React.useCallback((layerId) => {
     setLayers(prev => prev.filter(l => l.id !== layerId));
-    if (selectedLayerId === layerId) {
+    if (selectedLayerIdRef.current === layerId) {
       setSelectedLayerId(null);
     }
-  };
+  }, []);
 
   // 切换图层可见性
   const toggleLayerVisibility = (layerId) => {
@@ -118,8 +130,120 @@ function App() {
     });
   };
 
-  const isChatImageModel = (name) =>
-    name === 'gemini-3-pro-image-preview';
+  // 复制图层
+  const duplicateLayer = React.useCallback((layerId) => {
+    setLayers(prev => {
+      const sourceLayer = prev.find(l => l.id === layerId);
+      if (!sourceLayer) {
+        // 如果图层不存在，清除 sessionStorage 中的 ID
+        sessionStorage.removeItem('copiedLayerId');
+        console.warn('未找到要复制的图层');
+        return prev;
+      }
+
+      const newLayer = {
+        ...sourceLayer,
+        id: nextLayerIdRef.current++,
+        name: `${sourceLayer.name} (副本)`,
+        // 偏移位置使其可见
+        x: (sourceLayer.x || 0) + 20,
+        y: (sourceLayer.y || 0) + 20,
+      };
+
+      // 延迟设置选中状态，等待 Fabric 对象创建完成
+      setTimeout(() => {
+        setSelectedLayerId(newLayer.id);
+      }, 100);
+
+      return [...prev, newLayer];
+    });
+  }, []);
+
+  // 文件上传处理
+  const handleFileUpload = React.useCallback(async (e) => {
+    const input = e.target;
+    const file = input.files?.[0];
+    if (!file) return;
+
+    try {
+      input.value = '';
+
+      const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+      });
+
+      const mime = String(dataUrl).split(';')[0].split(':')[1] || 'image/png';
+      const base64 = String(dataUrl).split(',')[1];
+
+      // 获取图片尺寸
+      const img = new Image();
+      img.src = dataUrl;
+      await new Promise((resolve) => { img.onload = resolve; });
+
+      // 添加为新图层
+      addLayer({
+        url: dataUrl,
+        base64,
+        mimeType: mime,
+        width: img.width,
+        height: img.height,
+        x: 0,
+        y: 0,
+      });
+
+      setMode('edit');
+      setDrawMode('select');
+    } catch (err) {
+      console.error('上传失败', err);
+      alert('上传失败: ' + err.message);
+    }
+  }, [addLayer, setMode, setDrawMode]);
+
+  // 遮罩抠图功能
+  const handleMaskExtraction = async () => {
+    if (!mainLayerForMask || !maskLayerForExtraction) {
+      alert('请先选择主图层和遮罩图层');
+      return;
+    }
+
+    const mainLayer = layers.find(l => l.id === mainLayerForMask);
+    const maskLayer = layers.find(l => l.id === maskLayerForExtraction);
+
+    if (!mainLayer || !maskLayer) {
+      alert('图层不存在');
+      return;
+    }
+
+    try {
+      setIsRemoving(true);
+      const resultDataUrl = await extractByMask(mainLayer.url, maskLayer.url);
+
+      await addLayer({
+        url: resultDataUrl,
+        name: `${mainLayer.name} (遮罩抠图)`,
+      });
+
+      // 重置状态
+      setMaskExtractionMode(false);
+      setMainLayerForMask(null);
+      setMaskLayerForExtraction(null);
+
+      alert('遮罩抠图完成！');
+    } catch (error) {
+      console.error('Mask extraction failed:', error);
+      alert(`遮罩抠图失败: ${error.message}`);
+    } finally {
+      setIsRemoving(false);
+    }
+  };
+
+  const isChatImageModel = (name) => {
+    // 所有 Gemini 模型和 nano-banana 模型都支持 Chat Completions API
+    return name.startsWith('gemini-') || name.startsWith('nano-banana');
+  };
 
   // 抠图功能
   const handleRemoveBackground = async (layerId) => {
@@ -165,15 +289,54 @@ function App() {
     const layer = layers.find(l => l.id === layerId);
     if (!layer || !layer.url) return;
 
-    const a = document.createElement('a');
-    a.href = layer.url;
-    const ext = layer.mimeType === 'image/jpeg' ? 'jpg' : layer.mimeType === 'image/webp' ? 'webp' : 'png';
-    a.download = `${layer.name}_${new Date().toISOString().replace(/[:.]/g, '-')}.${ext}`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    // 创建一个临时 canvas 来确保透明背景
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext('2d', { alpha: true });
+
+      // 不设置背景色，保持透明
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0);
+
+      // 导出为 PNG（保留透明通道）
+      canvas.toBlob((blob) => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const ext = layer.mimeType === 'image/jpeg' ? 'jpg' : layer.mimeType === 'image/webp' ? 'webp' : 'png';
+        a.download = `${layer.name}_${new Date().toISOString().replace(/[:.]/g, '-')}.${ext}`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }, 'image/png');
+    };
+    img.src = layer.url;
   };
 
+  // 处理拖拽上传
+  const handleDrop = async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const files = Array.from(e.dataTransfer.files);
+    const imageFiles = files.filter(file => file.type.startsWith('image/'));
+
+    for (const file of imageFiles) {
+      await handleFileUpload({ target: { files: [file] } });
+    }
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  // 处理粘贴上传
   React.useEffect(() => {
     localStorage.setItem('apiKey', apiKey);
   }, [apiKey]);
@@ -198,47 +361,83 @@ function App() {
     localStorage.setItem('useGeminiNative', useGeminiNative);
   }, [useGeminiNative]);
 
-  const handleFileUpload = async (e) => {
-    const input = e.target;
-    const file = input.files?.[0];
-    if (!file) return;
+  // 快捷键处理
+  React.useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Ctrl+C / Cmd+C: 复制图层
+      if ((e.ctrlKey || e.metaKey) && e.key === 'c' && !e.shiftKey) {
+        // 检查是否在输入框中
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
 
-    try {
-      input.value = '';
+        const currentSelectedId = selectedLayerIdRef.current;
+        if (currentSelectedId) {
+          e.preventDefault();
+          // 将选中的图层 ID 存储到 sessionStorage
+          sessionStorage.setItem('copiedLayerId', currentSelectedId);
+          console.log('已复制图层 ID:', currentSelectedId);
 
-      const dataUrl = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.readAsDataURL(file);
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = reject;
-      });
+          // 清空剪贴板（写入空白内容）
+          try {
+            navigator.clipboard.writeText('').catch(() => {
+              console.log('无法清空剪贴板');
+            });
+          } catch (err) {
+            console.log('浏览器不支持剪贴板操作');
+          }
+        }
+      }
 
-      const mime = String(dataUrl).split(';')[0].split(':')[1] || 'image/png';
-      const base64 = String(dataUrl).split(',')[1];
+      // Delete: 删除图层
+      if (e.key === 'Delete') {
+        // 检查是否在输入框中
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
 
-      // 获取图片尺寸
-      const img = new Image();
-      img.src = dataUrl;
-      await new Promise((resolve) => { img.onload = resolve; });
+        const currentSelectedId = selectedLayerIdRef.current;
+        if (currentSelectedId) {
+          e.preventDefault();
+          deleteLayer(currentSelectedId);
+        }
+      }
+    };
 
-      // 添加为新图层
-      addLayer({
-        url: dataUrl,
-        base64,
-        mimeType: mime,
-        width: img.width,
-        height: img.height,
-        x: 0,
-        y: 0,
-      });
+    const handlePasteEvent = async (e) => {
+      // 检查是否在输入框中
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
 
-      setMode('edit');
-      setDrawMode('select');
-    } catch (err) {
-      console.error('上传失败', err);
-      alert('上传失败: ' + err.message);
-    }
-  };
+      // 优先检查剪贴板中是否有图片
+      const items = e.clipboardData?.items;
+      if (items) {
+        for (const item of items) {
+          if (item.type.startsWith('image/')) {
+            // 剪贴板有图片，粘贴图片
+            e.preventDefault();
+            const file = item.getAsFile();
+            if (file) {
+              await handleFileUpload({ target: { files: [file] } });
+              // 粘贴图片后清除复制的图层 ID
+              sessionStorage.removeItem('copiedLayerId');
+            }
+            return;
+          }
+        }
+      }
+
+      // 剪贴板没有图片，检查是否有复制的图层 ID
+      const copiedLayerId = sessionStorage.getItem('copiedLayerId');
+      if (copiedLayerId) {
+        e.preventDefault();
+        duplicateLayer(parseInt(copiedLayerId));
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('paste', handlePasteEvent);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('paste', handlePasteEvent);
+    };
+  }, [deleteLayer, duplicateLayer, handleFileUpload]);
 
   const handleGenerate = async () => {
     if (!prompt.trim()) {
@@ -289,6 +488,7 @@ function App() {
             apiKey,
             baseUrl,
             model: modelName,
+            useGeminiNative, // 添加 Gemini 原生格式支持
           });
           resultDataUrl = `data:${result.mimeType};base64,${result.base64}`;
         } else {
@@ -535,10 +735,18 @@ function App() {
           onToggleLock={toggleLayerLock}
           onMoveLayerUp={moveLayerUp}
           onMoveLayerDown={moveLayerDown}
+          onDuplicateLayer={duplicateLayer}
           onRemoveBackground={handleRemoveBackground}
           onDownloadLayer={downloadLayer}
           isRemoving={isRemoving}
           removalProgress={removalProgress}
+          maskExtractionMode={maskExtractionMode}
+          setMaskExtractionMode={setMaskExtractionMode}
+          mainLayerForMask={mainLayerForMask}
+          setMainLayerForMask={setMainLayerForMask}
+          maskLayerForExtraction={maskLayerForExtraction}
+          setMaskLayerForExtraction={setMaskLayerForExtraction}
+          onMaskExtraction={handleMaskExtraction}
         />
       }
       properties={
@@ -580,7 +788,11 @@ function App() {
         />
       }
     >
-      <div className="flex-1 w-full h-full p-4">
+      <div
+        className="flex-1 w-full h-full p-4"
+        onDrop={handleDrop}
+        onDragOver={handleDragOver}
+      >
         <CanvasEditor
           layers={layers}
           onLayersChange={(layerData) => {
