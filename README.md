@@ -50,6 +50,17 @@ v1作品：
 🎨 **实现选区工具** - 实现多种套索工具、抠图、蒙版生成功能
 🎨 **AI抠图功能** - 多种方式抠图功能
 
+# 2026-1-30 12:40 更新日志：
+### 功能新增：
+- 新增图层复制粘贴快捷键功能（Ctrl+C / Cmd+C：复制当前选中的图层 Ctrl+V / Cmd+V：粘贴图层）
+- 新增拖拽上传图片功能
+- 新增粘贴上传图片功能
+- 新增根据遮罩图抠图功能（左侧图层列表右上角的layer图标：选择主图，选择遮罩图，点击一键抠图）
+
+### BUG修复
+- 修复了图片编辑功能中 Gemini 原生格式不生效的问题
+- 修复了下载图层时透明背景丢失的问题。
+- 修复gemini-2.5-flash-image模型无法使用：当前模型仅支持有遮罩的编辑，请先绘制遮罩区域
 
 # 2026-1-28 20:30 更新日志：
 支持原生Gemini接口，多图层编辑系统、AI抠图、遮罩跟随及Docker部署优化
@@ -217,9 +228,14 @@ A: 图片元素如果比较多比较复杂，可能会导致不稳定，影响�
 - **Issue**: [GitHub Issues](https://github.com/chunxiuxiamo/ai-image-edit/issues)
 - **GitHub**: [@chunxiuxiamo](https://github.com/chunxiuxiamo)
 - **项目链接**: [https://github.com/chunxiuxiamo/ai-image-edit](https://github.com/chunxiuxiamo/ai-image-edit)
-- **个人微信**：![8aeeaae52f366b19e7bfe05b07e0920a](https://github.com/user-attachments/assets/4d601a83-d19e-48e2-85f6-f36d957cebfc)
+- <img width="269" height="367" alt="image" src="https://github.com/user-attachments/assets/1e4325da-9dd0-4762-9c81-03b545eeca81" /> <img width="329" height="452" alt="image" src="https://github.com/user-attachments/assets/1a6a9794-737c-422a-898f-22615373ff4d" />
+
 
 ## 🌟 Star History
-
 如果这个项目对你有帮助，请给一个 ⭐ Star 支持一下！
+
+## ☕ 支持项目
+- <img width="250" height="342" alt="image" src="https://github.com/user-attachments/assets/e1d9ca3a-17b8-450f-968a-a0866cb1b85c" /> <img width="271" height="386" alt="image" src="https://github.com/user-attachments/assets/efbf9b31-80b5-49b8-b905-6a59c6e5ce16" />
+
+如果喜欢这个项目并能对你有很大帮助，欢迎你的赞助支持~
 ---
