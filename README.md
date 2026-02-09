@@ -13,11 +13,36 @@
 ## 🚀 快速使用指南
 > 💡 **AI 生成图片注意**：支持各种绘图模型，需要模型支持通用OpenAI API格式，编辑的话也是一样。
 
-```
 1️⃣ 克隆仓库
-   git clone https://github.com/chunxiuxiamo/ai-image-edit.git
 
-```
+   ```bash
+   git clone https://github.com/chunxiuxiamo/ai-image-edit.git
+   cd ai-image-edit
+   ```
+
+2️⃣ 安装依赖
+   ```bash
+   npm install
+   ```
+
+   > 🍎 **macOS 用户特别提示**：
+   > 如果您在使用 macOS (特别是 M 系列芯片) 时遇到类似 `Error: Cannot find module @rollup/rollup-darwin-arm64` 的报错，请执行以下命令清理并重新安装依赖：
+   > ```bash
+   > rm -rf node_modules package-lock.json
+   > npm install
+   > ```
+
+3️⃣ 启动开发服务器
+   ```bash
+   npm run dev
+   ```
+   启动后，在浏览器中访问 [http://localhost:5173/](http://localhost:5173/) 即可使用。
+
+4️⃣ 构建生产版本
+   ```bash
+   npm run build
+   ```
+
 
 ### 代表作品展示
 V2.1作品：
